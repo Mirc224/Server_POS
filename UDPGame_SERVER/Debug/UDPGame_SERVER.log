@@ -1,0 +1,16 @@
+﻿  Body.cpp
+  MapBorder.cpp
+  Player.cpp
+c:\users\mirko\source\repos\udpgame_server\udpgame_server\player.cpp(226): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+c:\users\mirko\source\repos\udpgame_server\udpgame_server\player.cpp(230): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+c:\users\mirko\source\repos\udpgame_server\udpgame_server\player.cpp(236): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+  Projectil.cpp
+  Server.cpp
+c:\users\mirko\source\repos\udpgame_server\udpgame_server\server.cpp(819): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+c:\users\mirko\source\repos\udpgame_server\udpgame_server\server.cpp(820): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+  Vector.cpp
+  Wall.cpp
+  main.cpp
+c:\users\mirko\source\repos\udpgame_server\udpgame_server\main.cpp(63): warning C4326: return type of 'main' should be 'int' instead of 'void'
+  Generating Code...
+  UDPGame_SERVER.vcxproj -> C:\Users\Mirko\source\repos\UDPGame_SERVER\Debug\UDPGame_SERVER.exe
