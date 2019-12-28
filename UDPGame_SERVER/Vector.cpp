@@ -5,6 +5,9 @@
 Vector::Vector(const Point& p)
 	: x(p.x), y(p.y), z(p.z)
 {
+	v[0] = p.x;
+	v[1] = p.y;
+	v[2] = p.z;
 }
 
 Vector Vector::operator-() const
@@ -27,6 +30,9 @@ Vector Vector::operator=(const Vector & v)
 	x = v.x;
 	y = v.y;
 	z = v.z;
+	this->v[0] = v.x;
+	this->v[1] = v.y;
+	this->v[2] = v.z;
 	return Vector(x, y, z);;
 }
 

@@ -15,8 +15,10 @@ public:
 	uint16 getOwnerSlot();
 	uint8 getProjectilNumber();
 	Vector getPosition();
+	Vector getNewPositionInDirection(float distance);
 	float getCordX();
 	float getCordY();
+	Body& getBody();
 	void setProjectilStatus(Projectil::Projectil_Status status);
 	void setProjectilDirection(Projectil::Projectil_Direction direction);
 	void setOwnerSlot(uint16 ownerSlot);

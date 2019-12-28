@@ -129,8 +129,10 @@
     <ClCompile Include="Wall.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AABB.h" />
     <ClInclude Include="Body.h" />
     <ClInclude Include="CollisionObject.h" />
+    <ClInclude Include="Hittable.h" />
     <ClInclude Include="MapBorder.h" />
     <ClInclude Include="odin.h" />
     <ClInclude Include="Player.h" />

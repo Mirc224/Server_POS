@@ -31,6 +31,28 @@ Vector Projectil::getPosition()
 	return this->m_body.getPosition();
 }
 
+Vector Projectil::getNewPositionInDirection(float distance)
+{
+	switch (this->m_projectilDirection)
+	{
+	case Projectil::Projectil_Direction::UP:
+		return this->m_body.getPosition() + Vector(0.0f, -distance);
+		break;
+	case Projectil::Projectil_Direction::DOWN:
+		return this->m_body.getPosition() + Vector(0.0f, +distance);
+		break;
+	case Projectil::Projectil_Direction::LEFT:
+		return this->m_body.getPosition() + Vector(-distance, 0.0f);
+		break;
+	case Projectil::Projectil_Direction::RIGHT:
+		return this->m_body.getPosition() + Vector(distance, 0.0f);
+		break;
+	default:
+		return this->m_body.getPosition();
+		break;
+	}
+}
+
 float Projectil::getCordX()
 {
 	return m_body.getPosition().x;
@@ -39,6 +61,11 @@ float Projectil::getCordX()
 float Projectil::getCordY()
 {
 	return m_body.getPosition().y;
+}
+
+Body & Projectil::getBody()
+{
+	return this->m_body;
 }
 
 void Projectil::setProjectilStatus(Projectil::Projectil_Status status)

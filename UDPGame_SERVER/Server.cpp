@@ -1,4 +1,6 @@
+#define NOMINMAX
 #include "Server.h"
+#include <algorithm>
 
 bool operator==(const IP_Endpoint& a, const IP_Endpoint& b) { return a.address == b.address && a.port == b.port; }
 
@@ -40,6 +42,11 @@ void Server::Init()
 	sleep_granularity_ms = 1;
 	sleep_granularity_was_set = timeBeginPeriod(sleep_granularity_ms) == TIMERR_NOERROR;
 	QueryPerformanceFrequency(&clock_frequency);
+
+	for (uint16 player_i = 0; player_i < MAX_CLIENTS; ++player_i)
+	{
+		hittable_objects.push_back(&player_objects[player_i]);
+	}
 
 	for (uint16 i = 0; i < MAX_CLIENTS; ++i)
 	{
@@ -230,7 +237,7 @@ void Server::Run()
 		if (time_since_spawn >= NEXT_RESPAWN)
 		{
 			time_since_spawn = 0.0f;
-			RespawnPlayer(0);
+			//RespawnPlayer(0);
 		}
 		while (time_taken_s < SECONDS_PER_TICK)
 		{
@@ -506,6 +513,7 @@ bool Server::RemoveClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from)
 			from.sin_addr.S_un.S_un_b.s_b3,
 			from.sin_addr.S_un.S_un_b.s_b4,
 			from.sin_port);
+		player_objects[slot].setPlayerStatus(Player::Status::DEATH);
 	}
 	return true;
 }
@@ -676,7 +684,7 @@ void Server::HandlePlayerInput()
 					continue;
 				if (&tmpPlayer == &player_objects[i])
 					continue;
-				if (tmpPlayer.CheckCollision(player_objects[i], move))
+				if (tmpPlayer.CheckCollisionMove(player_objects[i], move))
 				{
 					notCollide = false;
 					break;
@@ -686,7 +694,7 @@ void Server::HandlePlayerInput()
 			{
 				for (uint16 i = 0; i < MAP_BORDERS; ++i)
 				{
-					if (tmpPlayer.CheckCollision(map_border[i], move))
+					if (tmpPlayer.CheckCollisionMove(map_border[i], move))
 					{
 						notCollide = false;
 						break;
@@ -741,68 +749,13 @@ void Server::UpdateGame()
 			{
 				printf("client %hu timed out\n", i);
 				client_endpoints[i] = {};
+				player_objects[i].setPlayerStatus(Player::Status::DEATH);
 			}
 			else
 			{
-				Player& tmpPlayer = player_objects[i];
-				if (tmpPlayer.getPlayerStatus() == Player::Status::ALIVE)
-				{
-					if (!tmpPlayer.readyToFire())
-					{
-						if (tmpPlayer.getPlayerAmmo() <= 0)
-						{
-							if (tmpPlayer.getReloadTime() >= RELOAD_TIME)
-							{
-								tmpPlayer.setReloadTime(0);
-								tmpPlayer.Reload();
-								printf("Player %d reloaded\n", i);
-							}
-							else
-								tmpPlayer.Update(SECONDS_PER_TICK);
-						}
-						else
-						{
-							if (tmpPlayer.getLastShotTime() >= RECOIL_TIME)
-							{
-								tmpPlayer.setShotTime(0);
-								tmpPlayer.setReadyToFire(true);
-								printf("Player %d ready to shoot \n", i);
-							}
-							else
-								tmpPlayer.Update(SECONDS_PER_TICK);
-						}
-					}
-				}
-				else
-				{
-					if (tmpPlayer.getRespawnTime() >= RESPAWN_TIME)
-					{
-						this->RespawnPlayer(i);
-					}
-					else
-						tmpPlayer.Update(SECONDS_PER_TICK);
-				}
-				for (uint16 i_projectil = 0; i_projectil < MAX_PROJECTILES; ++i_projectil)
-				{
-					Projectil& tmpProjectil = projectil_objects[i * MAX_PROJECTILES + i_projectil];
-					if (tmpProjectil.getProjectilStatus() == Projectil::Projectil_Status::ACTIVE)
-					{
-						Vector projectilPosition = tmpProjectil.getPosition();
-
-						if (projectilPosition.x < -(MAP_WIDTH / 2)
-							|| projectilPosition.x >(MAP_WIDTH / 2)
-							|| projectilPosition.y < -(MAP_HEIGHT / 2)
-							|| projectilPosition.y > +(MAP_HEIGHT / 2))
-						{
-							tmpProjectil.setProjectilStatus(Projectil::Projectil_Status::DISABLED);
-						}
-						else
-						{
-							tmpProjectil.moveInDirection(SECONDS_PER_TICK * PROJECTIL_SPEED);
-						}
-					}
-				}
-				
+				HandlePlayerUpdate(i);
+				CheckHits(TICKS_PER_SECOND);
+				HandlePlayerProjectilesUpdate(i);
 			}
 		}
 	}
@@ -817,13 +770,30 @@ void Server::RespawnPlayer(uint16 playerSlot)
 	Player& tmpPlayer = player_objects[playerSlot];
 	Vector tmpPlayerSize = tmpPlayer.getBody().getSize();
 	int possibleWidth = (int)MAP_WIDTH - tmpPlayerSize.x;
-	int possibleHeight = (int)MAP_HEIGHT - tmpPlayerSize.y;
-	printf("Od %.2f  po   %0.2f \n", 0 - possibleWidth / 2.0f, possibleWidth - possibleWidth / 2.0f);
-	printf("Od %.2f  po   %0.2f \n", 0 - possibleHeight / 2.0f, possibleHeight - possibleHeight / 2.0f);
-	float randX = rand() % possibleWidth - possibleWidth / 2.0f;
-	float randY = rand() % possibleHeight - possibleHeight / 2.0f;
-	printf("X: %.2f Y%.2f \n", randX, randY);
-	tmpPlayer.getBody().setPosition(randX, randY);
+	int possibleHeight = (int)MAP_HEIGHT - tmpPlayerSize.y;;
+	float randX;
+	float randY;
+	bool colide = true;
+	while (colide) 
+	{
+		colide = false;
+		randX = rand() % possibleWidth - possibleWidth / 2.0f;
+		randY = rand() % possibleHeight - possibleHeight / 2.0f;
+		tmpPlayer.getBody().setPosition(randX, randY);
+		for (uint16 i = 0; i < MAX_CLIENTS; ++i)
+		{
+			if (!client_endpoints[i].address)
+				continue;
+			if (&tmpPlayer == &player_objects[i])
+				continue;
+			if (tmpPlayer.CheckCollision(player_objects[i]))
+			{
+				colide = true;
+				break;
+			}
+		}
+	}
+	tmpPlayer.Spawn();
 }
 /*
 void Server::HandleState(int8 * buffer, int32 bytes_read)
@@ -860,4 +830,218 @@ void Server::HandleState(int8 * buffer, int32 bytes_read)
 Server::~Server()
 {
 	WSACleanup();
+}
+
+void Server::HandlePlayerUpdate(uint16 playerSlot)
+{
+	Player& tmpPlayer = player_objects[playerSlot];
+	if (tmpPlayer.getPlayerStatus() == Player::Status::ALIVE)
+	{
+		if (!tmpPlayer.readyToFire())
+		{
+			if (tmpPlayer.getPlayerAmmo() <= 0)
+			{
+				if (tmpPlayer.getReloadTime() >= RELOAD_TIME)
+				{
+					tmpPlayer.setReloadTime(0);
+					tmpPlayer.Reload();
+					printf("Player %d reloaded\n", playerSlot);
+				}
+				else
+					tmpPlayer.Update(SECONDS_PER_TICK);
+			}
+			else
+			{
+				if (tmpPlayer.getLastShotTime() >= RECOIL_TIME)
+				{
+					tmpPlayer.setShotTime(0);
+					tmpPlayer.setReadyToFire(true);
+					printf("Player %d ready to shoot \n", playerSlot);
+				}
+				else
+					tmpPlayer.Update(SECONDS_PER_TICK);
+			}
+		}
+	}
+	else
+	{
+		if (tmpPlayer.getRespawnTime() >= RESPAWN_TIME)
+		{
+			this->RespawnPlayer(playerSlot);
+		}
+		else
+			tmpPlayer.Update(SECONDS_PER_TICK);
+	}
+}
+
+void Server::HandlePlayerProjectilesUpdate(uint16 playerSlot)
+{
+	for (uint16 i_projectil = 0; i_projectil < MAX_PROJECTILES; ++i_projectil)
+	{
+		Projectil& tmpProjectil = projectil_objects[playerSlot * MAX_PROJECTILES + i_projectil];
+		if (tmpProjectil.getProjectilStatus() == Projectil::Projectil_Status::ACTIVE)
+		{
+			Vector projectilPosition = tmpProjectil.getPosition();
+
+			if (projectilPosition.x < -(MAP_WIDTH / 2)
+				|| projectilPosition.x >(MAP_WIDTH / 2)
+				|| projectilPosition.y < -(MAP_HEIGHT / 2)
+				|| projectilPosition.y > +(MAP_HEIGHT / 2))
+			{
+				tmpProjectil.setProjectilStatus(Projectil::Projectil_Status::DISABLED);
+			}
+			else
+			{
+				tmpProjectil.moveInDirection(SECONDS_PER_TICK * PROJECTIL_SPEED);
+			}
+		}
+	}
+}
+
+void Server::CheckHits(float deltaTime)
+{
+
+	Projectil* tmpProjectil;
+	Vector v0;
+	Vector v1;
+	Vector vecInterSection;
+	Hittable* tmpHittable = nullptr;
+
+	uint16 offset = -1;
+	float32 distance = SECONDS_PER_TICK * PROJECTIL_SPEED;
+	for (uint16 i = 0; i < MAX_CLIENTS; ++i)
+	{
+		if (!client_endpoints[i].address)
+			continue;
+		Player* tmpPlayer = &player_objects[i];
+		offset = i * MAX_PROJECTILES;
+		for (uint16 projectil_i = 0; projectil_i < MAX_PROJECTILES; ++projectil_i)
+		{
+			tmpProjectil = &projectil_objects[offset + projectil_i];
+			if (tmpProjectil->getProjectilStatus() == Projectil::ACTIVE)
+			{
+				v0 = (tmpProjectil->getBody().getPosition());
+				v1 = tmpProjectil->getNewPositionInDirection(distance);
+				if (traceLine(v0, v1, vecInterSection, tmpPlayer,tmpHittable))
+				{
+					if (tmpHittable != nullptr)
+					{
+						tmpHittable->HittedAction();
+						tmpProjectil->setProjectilStatus(Projectil::Projectil_Status::DISABLED);
+						//printf("%s zasiahol %s\n", tmpPlayer->getName(), tmpHittable->getName());
+						printf("Zasah \n");
+					}
+				}
+				for (uint16 hittable_i = 0; hittable_i < hittable_objects.size(); ++hittable_i)
+				{
+					tmpHittable = hittable_objects.at(hittable_i);
+					if (tmpHittable == tmpPlayer)
+						continue;
+					if (tmpHittable->isActive())
+					{
+					}
+
+				}
+			}
+		}
+		/*
+		for (uint16 other_player_i = 0; other_player_i < MAX_CLIENTS; ++other_player_i)
+		{
+			if (!client_endpoints[i].address)
+				continue;
+			if (i == other_player_i)
+				continue;
+			offset = other_player_i * MAX_PROJECTILES;
+			for (uint16 projectil_i = 0; projectil_i < MAX_PROJECTILES; ++projectil_i)
+			{
+				if (projectil_objects[offset + projectil_i].getProjectilStatus() == Projectil::ACTIVE)
+				{
+					for
+				}
+			}
+
+		}
+		*/
+	}
+}
+
+bool Server::traceLine(const Vector & pociatocnyVektor, const Vector & koncovyVektor, Vector & vecIntersection, Player* firedBy ,Hittable *& zasiahnuty)
+{
+	float flLowestFraction = 1;
+	Vector vecTestIntersection;
+	float flTestFraction;
+	AABB aabbSize;
+	Hittable* checkedHittable = nullptr;
+	for (int i = 0; i < hittable_objects.size(); ++i)
+	{
+		checkedHittable = hittable_objects.at(i);
+		if (!checkedHittable->isActive())
+			continue;
+		if (checkedHittable == (Hittable*)firedBy)
+			continue;
+		aabbSize = checkedHittable->getAABBsize() + Point(checkedHittable->getBody().getPosition());
+		if (lineAABBIntersection(aabbSize, pociatocnyVektor, koncovyVektor, vecTestIntersection, flTestFraction) && flTestFraction < flLowestFraction)
+		{
+			vecIntersection = vecTestIntersection;
+			flLowestFraction = flTestFraction;
+			zasiahnuty = checkedHittable;
+		}
+	}
+	if (flLowestFraction < 1)
+		return true;
+
+	return false;
+}
+
+bool Server::lineAABBIntersection(const AABB & aabbBox, const Vector & v0, const Vector & v1, Vector & vecIntersection, float & flFraction)
+{
+	float f_low = 0;
+	float f_high = 1;
+	if (!clipLine(0, aabbBox, v0, v1, f_low, f_high))
+	{
+		return false;
+	}
+	if (!clipLine(1, aabbBox, v0, v1, f_low, f_high))
+	{
+		return false;
+	}
+	Vector b = v1 - v0;
+	vecIntersection = v0 + b * f_low;
+
+	flFraction = f_low;
+
+	return true;
+}
+
+bool Server::clipLine(int d, const AABB & aabbBox, const Vector & v0, const Vector & v1, float & f_low, float & f_high)
+{
+	// f_low and f_high are the results from all clipping so far. We'll write our results back out to those parameters.
+
+// f_dim_low and f_dim_high are the results we're calculating for this current dimension.
+	float f_dim_low, f_dim_high;
+
+	// Find the point of intersection in this dimension only as a fraction of the total vector http://youtu.be/USjbg5QXk3g?t=3m12s
+	f_dim_low = (aabbBox.vecMin.v[d] - v0.v[d]) / (v1.v[d] - v0.v[d]);
+	f_dim_high = (aabbBox.vecMax.v[d] - v0.v[d]) / (v1.v[d] - v0.v[d]);
+
+	// Make sure low is less than high
+	if (f_dim_high < f_dim_low)
+		std::swap(f_dim_high, f_dim_low);
+
+	// If this dimension's high is less than the low we got then we definitely missed. http://youtu.be/USjbg5QXk3g?t=7m16s
+	if (f_dim_high < f_low)
+		return false;
+
+	// Likewise if the low is less than the high.
+	if (f_dim_low > f_high)
+		return false;
+
+	// Add the clip from this dimension to the previous results http://youtu.be/USjbg5QXk3g?t=5m32s
+	f_low = std::max(f_dim_low, f_low);
+	f_high = std::min(f_dim_high, f_high);
+
+	if (f_low > f_high)
+		return false;
+
+	return true;
 }

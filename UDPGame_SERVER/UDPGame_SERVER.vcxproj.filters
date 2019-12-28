@@ -68,6 +68,12 @@
     <ClInclude Include="MapBorder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Hittable.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AABB.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="UDPGame_SERVER.rc">

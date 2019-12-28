@@ -6,6 +6,7 @@
 #include <winsock2.h>
 #include <windows.h> // windows.h must be included AFTER winsock2.h
 #include <string>
+#include <vector>
 #include <mutex>
 #include "Player.h"
 #include "Projectil.h"
@@ -104,6 +105,16 @@ public:
 	// void HandleState(int8* buffer, int32 bytes_read);
 
 	virtual ~Server();
+
+private:
+	void HandlePlayerUpdate(uint16 playerSlot);
+	void HandlePlayerProjectilesUpdate(uint16 playerSlot);
+	void CheckHits(float deltaTime);
+
+	bool traceLine(const Vector & pociatocnyVektor, const Vector & koncovyVektor, Vector& vecIntersection, Player* firedBy, Hittable*& zasiahnuty);
+	bool lineAABBIntersection(const AABB& aabbBox, const Vector& v0, const Vector& v1, Vector& vecIntersection, float& flFraction);
+	bool clipLine(int dimension, const AABB& aabbBox, const Vector&v0, const Vector&v1, float &f_low, float& f_high);
+
 private:
 	SOCKET sock;
 	SOCKADDR_IN local_address;
@@ -117,6 +128,7 @@ private:
 	Player player_objects[MAX_CLIENTS];
 	Projectil projectil_objects[MAX_CLIENTS * MAX_PROJECTILES];
 	Player_Input client_inputs[MAX_CLIENTS];
+	std::vector<Hittable*> hittable_objects;
 	MapBorder map_border[4];
 	bool is_running = true;
 	bool has_player = false;

@@ -9,12 +9,18 @@ public:
 		x = X;
 		y = Y;
 		z = Z;
+		v[0] = X;
+		v[1] = Y;
+		v[2] = Z;
 	}
 	Vector(const Vector& othr)
 	{
 		x = othr.x;
 		y = othr.y;
 		z = othr.z;
+		v[0] = othr.x;
+		v[1] = othr.y;
+		v[2] = othr.z;
 	}
 	Vector(const class Point& p);
 	float Length() const;
@@ -40,6 +46,7 @@ public:
 	float x = 0;
 	float y = 0;
 	float z = 0;
+	float v[3];
 };
 
 class Point

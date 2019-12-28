@@ -4,7 +4,8 @@
 #include <stdlib.h> 
 #include <string>
 #include "CollisionObject.h"
-class Player : public CollisionObject
+#include "Hittable.h"
+class Player : public CollisionObject, public Hittable
 {
 public:
 	enum Status : uint8 { ALIVE, DEATH };
@@ -15,17 +16,22 @@ public:
 	Player::Direction getPlayerDirection();
 	Player::Action getPlayerAction();
 	uint8 getPlayerAmmo();
+	uint16 getPlayerSlot();
 	float getPlayerCordX();
 	float getPlayerCordY();
 	float getRespawnTime();
 	float getReloadTime();
 	float getLastShotTime();
+	std::string getName() override;
 	Body& getBody() override;
+	AABB& getAABBsize() override;
+	bool isActive() override;
 
 	void setCordX(float x);
 	void setCordY(float y);
 	void addCordX(float x);
 	void addCordY(float y);
+	void setPlayerSlot(uint16 playerSlot);
 	void setPlayerStatus(Player::Status newStatus);
 	void setPlayerDirection(Player::Direction newDirection);
 	void setPlayerAction(Player::Action newAction);
@@ -41,20 +47,29 @@ public:
 	void Reload();
 	void Shoot();
 
-	bool CheckCollision(CollisionObject& other, Vector move);
+	bool CheckCollisionMove(CollisionObject& other, Vector move);
+	bool CheckCollision(CollisionObject& other);
 	bool readyToFire();
 	
-	void Spawn(float x, float y);
+	void HittedAction();
+	void Spawn();
 	void UploadState(int8* buffer, int32& bytes_written);
 	void InsertState(int8* buffer, int32& bytes_read);
 	void Update(double deltaTime);
 	void Move(Vector v);
 	virtual ~Player();
+
+private:
+	bool hasIntersection(float otherPosX, float otherPosY, float otherHalfSizeX, float otherHalfSizeY,
+		float thisPosX, float thisPosY, float thisHalfSizeX, float thisHalfSizeY);
+
+
 private:
 	Status m_playerStatus = Player::Status::ALIVE;
 	Direction m_playerDirection = Player::Direction::DOWN;
 	Action m_playerAction = Player::Action::IDLE;
 	uint8 m_ammo = 4;
+	uint16 m_playerSlot;
 	float cordX = 10;
 	float cordY = -200;
 	float m_last_shot_t;
@@ -62,5 +77,6 @@ private:
 	float m_respawn_t;
 	bool m_ready_to_fire;
 	Body m_playerBody;
+	AABB m_aabbsize;
 };
 

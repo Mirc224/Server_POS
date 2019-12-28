@@ -10,6 +10,9 @@ Player::Player()
 	float vyska = 70.0f * ratio;
 	this->m_playerBody.setSize(Vector(sirka, vyska));
 	this->m_playerBody.setOrigin(this->m_playerBody.getSize() / 2.0f);
+
+	this->m_aabbsize.vecMin = Vector(-sirka / 2, -vyska / 2);
+	this->m_aabbsize.vecMax = Vector(sirka / 2, vyska / 2);
 }
 
 Player::Status Player::getPlayerStatus()
@@ -32,6 +35,11 @@ uint8 Player::getPlayerAmmo()
 	return this->m_ammo;
 }
 
+uint16 Player::getPlayerSlot()
+{
+	return this->m_playerSlot;
+}
+
 void Player::setCordX(float x)
 {
 	this->m_playerBody.getPosition().x = x;
@@ -52,26 +60,35 @@ void Player::addCordY(float y)
 	this->m_playerBody.getPosition().y += y;
 }
 
+void Player::setPlayerSlot(uint16 playerSlot)
+{
+	this->m_playerSlot = playerSlot;
+}
+
 Body & Player::getBody()
 {
 	return this->m_playerBody;
 }
 
-bool Player::CheckCollision(CollisionObject & other, Vector move)
+AABB & Player::getAABBsize()
+{
+	return this->m_aabbsize;
+}
+
+bool Player::isActive()
+{
+	return this->m_playerStatus == Player::Status::ALIVE;
+}
+
+bool Player::CheckCollision(CollisionObject & other)
 {
 	Vector otherPosition = other.getBody().getPosition();
 	Vector otherHalfSize = other.getBody().getSize() / 2.0f;
-	Vector thisPosition = getBody().getPosition() + move;
+	Vector thisPosition = getBody().getPosition();
 	Vector thisHalfSize = getBody().getSize() / 2.0f;
 
-	float deltaX = otherPosition.x - thisPosition.x;
-	float deltaY = otherPosition.y - thisPosition.y;
-	float intersectX = abs(deltaX) - (otherHalfSize.x + thisHalfSize.x);
-	float intersectY = abs(deltaY) - (otherHalfSize.y + thisHalfSize.y);
-	if (intersectX < 0.0f && intersectY < 0.0f)
-		return true;
-
-	return false;
+	return hasIntersection(otherPosition.x, otherPosition.y, otherHalfSize.x, otherHalfSize.y, 
+		thisPosition.x, thisPosition.y, thisHalfSize.x, thisHalfSize.y);
 }
 
 bool Player::readyToFire()
@@ -151,6 +168,17 @@ void Player::Shoot()
 		this->m_reload_t = 0.0f;
 }
 
+bool Player::CheckCollisionMove(CollisionObject & other, Vector move)
+{
+	Vector otherPosition = other.getBody().getPosition();
+	Vector otherHalfSize = other.getBody().getSize() / 2.0f;
+	Vector thisPosition = getBody().getPosition() + move;
+	Vector thisHalfSize = getBody().getSize() / 2.0f;
+
+	return hasIntersection(otherPosition.x, otherPosition.y, otherHalfSize.x, otherHalfSize.y,
+		thisPosition.x, thisPosition.y, thisHalfSize.x, thisHalfSize.y);
+}
+
 float Player::getPlayerCordX()
 {
 	return this->m_playerBody.getPosition().x;
@@ -176,10 +204,20 @@ float Player::getLastShotTime()
 	return this->m_last_shot_t;
 }
 
-void Player::Spawn(float x, float y)
+std::string Player::getName()
 {
-	this->m_playerBody.getPosition().x = x;
-	this->m_playerBody.getPosition().y = y;
+	return "Hrac " + std::to_string(this->m_playerSlot);
+}
+
+void Player::HittedAction()
+{
+	this->m_playerStatus = Player::Status::DEATH;
+	this->m_playerAction = Player::Action::KILLED;
+	this->m_respawn_t = 0.0f;
+}
+
+void Player::Spawn()
+{
 	this->m_respawn_t = 0.0f;
 	this->Reload();
 	this->m_playerDirection = Player::Direction::DOWN;
@@ -244,4 +282,16 @@ void Player::Move(Vector v)
 
 Player::~Player()
 {
+}
+
+bool Player::hasIntersection(float otherPosX, float otherPosY, float otherHalfSizeX, float otherHalfSizeY, float thisPosX, float thisPosY, float thisHalfSizeX, float thisHalfSizeY)
+{
+	float deltaX = otherPosX - thisPosX;
+	float deltaY = otherPosY - thisPosY;
+	float intersectX = abs(deltaX) - (otherHalfSizeX + thisHalfSizeX);
+	float intersectY = abs(deltaY) - (otherHalfSizeY + thisHalfSizeY);
+	if (intersectX < 0.0f && intersectY < 0.0f)
+		return true;
+
+	return false;
 }
