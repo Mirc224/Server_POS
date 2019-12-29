@@ -16,7 +16,7 @@
 const float32 	TURN_SPEED = 1.0f;	// how fast player turns
 const float32 	ACCELERATION = 20.0f;
 const float32 	PLAYER_SPEED = 250.0f;
-const float32	PROJECTIL_SPEED = 500.0f;
+const float32	PROJECTIL_SPEED = 1000.0f;
 const uint32	TICKS_PER_SECOND = 60;
 const float32	SECONDS_PER_TICK = 1.0f / float32(TICKS_PER_SECOND);
 const uint16	MAX_CLIENTS = 4;
@@ -75,7 +75,7 @@ struct Player_State
 
 struct Player_Input
 {
-	bool32 up, down, left, right;
+	bool32 up, down, left, right, fire;
 };
 
 static float32 time_since(LARGE_INTEGER t, LARGE_INTEGER frequency)
@@ -107,9 +107,11 @@ public:
 	virtual ~Server();
 
 private:
+	void HandleCurrentInputs();
 	void HandlePlayerUpdate(uint16 playerSlot);
 	void HandlePlayerProjectilesUpdate(uint16 playerSlot);
 	void CheckHits(float deltaTime);
+	void ResetClientInput(uint16 playerSlot);
 
 	bool traceLine(const Vector & pociatocnyVektor, const Vector & koncovyVektor, Vector& vecIntersection, Player* firedBy, Hittable*& zasiahnuty);
 	bool lineAABBIntersection(const AABB& aabbBox, const Vector& v0, const Vector& v1, Vector& vecIntersection, float& flFraction);
@@ -134,5 +136,6 @@ private:
 	bool has_player = false;
 	float32 time_without_players;
 	std::mutex send_buf_mtx;
+	std::mutex input_mutex;
 };
 

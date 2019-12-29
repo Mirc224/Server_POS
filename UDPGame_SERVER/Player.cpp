@@ -40,6 +40,16 @@ uint16 Player::getPlayerSlot()
 	return this->m_playerSlot;
 }
 
+uint16 Player::getKills()
+{
+	return this->m_kills;
+}
+
+uint16 Player::getDeaths()
+{
+	return this->m_deaths;
+}
+
 void Player::setCordX(float x)
 {
 	this->m_playerBody.getPosition().x = x;
@@ -214,6 +224,7 @@ void Player::HittedAction()
 	this->m_playerStatus = Player::Status::DEATH;
 	this->m_playerAction = Player::Action::KILLED;
 	this->m_respawn_t = 0.0f;
+	++this->m_deaths;
 }
 
 void Player::Spawn()

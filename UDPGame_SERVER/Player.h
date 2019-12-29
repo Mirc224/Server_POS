@@ -17,6 +17,8 @@ public:
 	Player::Action getPlayerAction();
 	uint8 getPlayerAmmo();
 	uint16 getPlayerSlot();
+	uint16 getKills();
+	uint16 getDeaths();
 	float getPlayerCordX();
 	float getPlayerCordY();
 	float getRespawnTime();
@@ -53,6 +55,7 @@ public:
 	
 	void HittedAction();
 	void Spawn();
+	void CountKill();
 	void UploadState(int8* buffer, int32& bytes_written);
 	void InsertState(int8* buffer, int32& bytes_read);
 	void Update(double deltaTime);
@@ -70,13 +73,13 @@ private:
 	Action m_playerAction = Player::Action::IDLE;
 	uint8 m_ammo = 4;
 	uint16 m_playerSlot;
-	float cordX = 10;
-	float cordY = -200;
 	float m_last_shot_t;
 	float m_reload_t;
 	float m_respawn_t;
 	bool m_ready_to_fire;
 	Body m_playerBody;
 	AABB m_aabbsize;
+	uint16 m_kills = 0;
+	uint16 m_deaths = 0;
 };
 
