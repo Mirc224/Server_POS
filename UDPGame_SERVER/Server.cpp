@@ -69,6 +69,10 @@ void Server::Init()
 	map_border[3].getBody().setSize(MAP_WIDTH, 0.0f);
 
 	time_without_players = 0.0f;
+	Wall* tmpWall = new Wall(Vector(100, 70), Vector(150, 165), "strom");
+
+	this->other_collision_objects.push_back(tmpWall);
+	this->hittable_objects.push_back(tmpWall);
 }
 
 void Server::Run()
@@ -185,6 +189,14 @@ bool Server::AddNewClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from)
 			break;
 		}
 	}
+	uint16 bytesRead = 1;
+	uint16 nameLength;
+	memcpy(&nameLength, &listenBuffer[bytesRead], sizeof(nameLength));
+	bytesRead += sizeof(nameLength);
+	std::string playerName(&listenBuffer[bytesRead], nameLength);
+	bytesRead += nameLength * sizeof(char);
+
+	this->player_objects[slot].setPlayerName(playerName);
 	send_buf_mtx.lock();
 	ZeroMemory(&buffer, SOCKET_BUFFER_SIZE);
 	buffer[0] = (int8)Server_Message::Join_Result;
@@ -192,14 +204,20 @@ bool Server::AddNewClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from)
 	{
 		printf("client will be assigned to slot %hu\n", slot);
 		buffer[1] = 1;
-		memcpy(&buffer[2], &slot, 2);
+		uint16 bytesWritten = 2;
+		memcpy(&buffer[bytesWritten], &slot, sizeof(slot));
+		bytesWritten += sizeof(slot);
+		memcpy(&buffer[bytesWritten], &this->mapNumber, sizeof(this->mapNumber));
+		bytesWritten += sizeof(this->mapNumber);
 		flags = 0;
-		if (sendto(sock, buffer, 4, flags, (SOCKADDR*)&from, from_size) != SOCKET_ERROR)
+		if (sendto(sock, buffer, bytesWritten + 1, flags, (SOCKADDR*)&from, from_size) != SOCKET_ERROR)
 		{
+			send_buf_mtx.unlock();
 			client_endpoints[slot] = from_endpoint;
 			time_since_heard_from_clients[slot] = 0.0f;
-			//client_objects[slot] = {};
 			client_inputs[slot] = {};
+			this->player_objects[slot].setDeaths(0);
+			this->player_objects[slot].setKills(0);
 			this->RespawnPlayer(slot);
 		}
 		else
@@ -222,25 +240,39 @@ bool Server::AddNewClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from)
 		send_buf_mtx.unlock();
 		return false;
 	}
-	send_buf_mtx.unlock();
 	return true;
 }
 
 bool Server::RemoveClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from)
 {
-
+	int flags = 0;
+	SOCKADDR_IN to;
+	to.sin_family = AF_INET;
+	to.sin_port = htons(PORT);
+	int to_length = sizeof(to);
 	uint16 slot;
 	memcpy(&slot, &listenBuffer[1], sizeof(slot));
-
 	if (client_endpoints[slot] == from_endpoint)
 	{
+		to.sin_addr.S_un.S_addr = client_endpoints[slot].address;
+		to.sin_port = client_endpoints[slot].port;
+
+		send_buf_mtx.lock();
+		this->FillBufferWithPlayersStats();
+		if (sendto(sock, buffer, SOCKET_BUFFER_SIZE, flags, (SOCKADDR*)&to, to_length) == SOCKET_ERROR)
+		{
+			printf("sendto failed: %d\n", WSAGetLastError());
+		}
+		send_buf_mtx.unlock();
+
 		client_endpoints[slot] = {};
 		printf("Client_Message::Disconnect from slot %d Address %d.%d.%d.%d:%d\n", slot, from.sin_addr.S_un.S_un_b.s_b1,
 			from.sin_addr.S_un.S_un_b.s_b2,
 			from.sin_addr.S_un.S_un_b.s_b3,
 			from.sin_addr.S_un.S_un_b.s_b4,
 			from.sin_port);
-		player_objects[slot].setPlayerStatus(Player::Status::DEATH);
+		this->player_objects[slot].setPlayerStatus(Player::Status::DEATH);
+		this->player_objects[slot].setPlayerName("Player" + std::to_string(slot));
 	}
 	return true;
 }
@@ -304,6 +336,24 @@ void Server::FillBufferWithGameState()
 		}
 	}
 	memcpy(&buffer[1], &numberOfObjects, sizeof(numberOfObjects));
+}
+
+void Server::FillBufferWithPlayersStats()
+{
+	int32 bytesWritten = 0;
+	uint16 numberOfPlayers = 0;
+	ZeroMemory(buffer, SOCKET_BUFFER_SIZE);
+	buffer[bytesWritten++] = (uint8)Server_Message::GameStats;
+	bytesWritten += sizeof(numberOfPlayers);
+	for (uint16 i = 0; i < MAX_CLIENTS; ++i)
+	{
+		if (client_endpoints[i].address)
+		{
+			player_objects[i].UploadPlayerStats(buffer, bytesWritten);
+			++numberOfPlayers;
+		}
+	}
+	memcpy(&buffer[1], &numberOfPlayers, sizeof(numberOfPlayers));
 }
 
 void Server::ParseBuffer()
@@ -371,6 +421,7 @@ void Server::UpdateGame()
 				printf("client %hu timed out\n", i);
 				client_endpoints[i] = {};
 				player_objects[i].setPlayerStatus(Player::Status::DEATH);
+				this->player_objects[i].setPlayerName("Player" + std::to_string(i));
 			}
 			else
 			{
@@ -413,8 +464,68 @@ void Server::RespawnPlayer(uint16 playerSlot)
 				break;
 			}
 		}
+		if (!colide)
+		{
+			for (uint16 object_i = 0; object_i < other_collision_objects.size(); ++object_i)
+			{
+				if (tmpPlayer.CheckCollision(*other_collision_objects[object_i]))
+				{
+					colide = true;
+					break;
+				}
+			}
+		}
 	}
 	tmpPlayer.Spawn();
+}
+
+void Server::LoadMap(uint16 mapNumber)
+{
+	for (uint16 i = 0; i < other_collision_objects.size(); ++i)
+	{
+		delete other_collision_objects[i];
+		other_collision_objects[i] = nullptr;
+	}
+	other_collision_objects.clear();
+	hittable_objects.clear();
+
+	for (uint16 player_i = 0; player_i < MAX_CLIENTS; ++player_i)
+	{
+		hittable_objects.push_back(&player_objects[player_i]);
+	}
+
+
+	Wall* tmpObject = nullptr;
+	std::string mapPath = "map" + std::to_string(mapNumber) + ".txt";
+	std::ifstream mapfile(mapPath);
+
+	int objType;
+	float width = 0;
+	float heigth = 0;
+	float cordX = 0;
+	float cordY = 0;
+	std::string objName;
+	while (mapfile >> objType)
+	{
+		switch ((Map_Object_Type)objType)
+		{
+		case Map_Object_Type::TREE:
+			mapfile >> width;
+			mapfile >> heigth;
+			mapfile >> cordX;
+			mapfile >> cordY;
+			mapfile >> objName;
+			tmpObject = new Wall(Vector(width, heigth), Vector(cordX, cordY), objName);
+			other_collision_objects.push_back(tmpObject);
+			hittable_objects.push_back(tmpObject);
+		default:
+			break;
+
+		}
+	}
+	other_collision_objects.shrink_to_fit();
+	hittable_objects.shrink_to_fit();
+	mapfile.close();
 }
 
 void Server::HandleCurrentInputs()
@@ -495,7 +606,16 @@ void Server::HandleCurrentInputs()
 				}
 				if (notCollide)
 				{
-					tmpPlayer.Move(move);
+					for (uint16 object_i = 0; object_i < this->other_collision_objects.size(); ++object_i)
+					{
+						if (tmpPlayer.CheckCollisionMove(*other_collision_objects[object_i], move))
+						{
+							notCollide = false;
+							break;
+						}
+					}
+					if (notCollide)
+						tmpPlayer.Move(move);
 				}
 			}
 			if (playerFire)
@@ -508,7 +628,7 @@ void Server::HandleCurrentInputs()
 						if (projectil_objects[offset + i].getProjectilStatus() == Projectil::DISABLED)
 						{
 							projectil_objects[offset + i].Activate(tmpPlayer.getBody(), (Projectil::Projectil_Direction)tmpPlayer.getPlayerDirection());
-							printf("Projectil %d of player %d was Activated \n", projectil_objects[offset + i].getProjectilNumber(), projectil_objects[offset + i].getOwnerSlot());
+							//printf("Projectil %d of player %d was Activated \n", projectil_objects[offset + i].getProjectilNumber(), projectil_objects[offset + i].getOwnerSlot());
 							tmpPlayer.Shoot();
 							break;
 						}
@@ -537,7 +657,7 @@ void Server::HandlePlayerUpdate(uint16 playerSlot)
 				{
 					tmpPlayer.setReloadTime(0);
 					tmpPlayer.Reload();
-					printf("Player %d reloaded\n", playerSlot);
+					//printf("Player %d reloaded\n", playerSlot);
 				}
 				else
 					tmpPlayer.Update(SECONDS_PER_TICK);
@@ -548,7 +668,7 @@ void Server::HandlePlayerUpdate(uint16 playerSlot)
 				{
 					tmpPlayer.setShotTime(0);
 					tmpPlayer.setReadyToFire(true);
-					printf("Player %d ready to shoot \n", playerSlot);
+					//printf("Player %d ready to shoot \n", playerSlot);
 				}
 				else
 					tmpPlayer.Update(SECONDS_PER_TICK);
@@ -619,22 +739,16 @@ void Server::CheckHits(float deltaTime)
 					if (tmpHittable != nullptr)
 					{
 						tmpHittable->HittedAction();
+						if (tmpHittable->countAsKill())
+						{
+							tmpPlayer->CountKill();
+						}
+
 						tmpProjectil->setProjectilStatus(Projectil::Projectil_Status::DISABLED);
 						std::string playerName = tmpPlayer->getName();
 						std::string hittedName = tmpHittable->getName();
 						printf("%s zasiahol %s\n", tmpPlayer->getName().c_str(), tmpHittable->getName().c_str());
-						printf("Zasah \n");
 					}
-				}
-				for (uint16 hittable_i = 0; hittable_i < hittable_objects.size(); ++hittable_i)
-				{
-					tmpHittable = hittable_objects.at(hittable_i);
-					if (tmpHittable == tmpPlayer)
-						continue;
-					if (tmpHittable->isActive())
-					{
-					}
-
 				}
 			}
 		}
@@ -735,5 +849,10 @@ bool Server::clipLine(int d, const AABB & aabbBox, const Vector & v0, const Vect
 Server::~Server()
 {
 	WSACleanup();
+	for (uint16 object_i = 0; object_i < other_collision_objects.size(); ++object_i)
+	{
+		delete other_collision_objects[object_i];
+	}
+	other_collision_objects.clear();
 	printf("Server shutdown - FINISH \n");
 }

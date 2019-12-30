@@ -10,5 +10,6 @@ public:
 	virtual Body& getBody() = 0;
 	virtual std::string getName()= 0;
 	virtual void HittedAction() = 0;
+	virtual bool countAsKill() = 0;
 	virtual ~Hittable() = default;
 };

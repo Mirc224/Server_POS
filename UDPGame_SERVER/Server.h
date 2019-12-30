@@ -8,9 +8,11 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <fstream>
 #include "Player.h"
 #include "Projectil.h"
 #include "MapBorder.h"
+#include "Wall.h"
 #pragma comment (lib, "ws2_32.lib")
 #pragma comment (lib, "winmm.lib")
 const float32 	TURN_SPEED = 1.0f;	// how fast player turns
@@ -33,17 +35,21 @@ const float32	EMPTY_SERVER_TIMEOUT = 10.0f;
 const float32	NEXT_RESPAWN = 1.0;
 static float32 time_since_spawn = 0.0;
 
+
+enum class Map_Object_Type : uint8 {TREE};
 enum class Client_Message : uint8
 {
 	Join,		// tell server we're new here
 	Leave,		// tell server we're leaving
-	Input 		// tell server our user input
+	Input, 		// tell server our user input
+	GameStats
 };
 
 enum class Server_Message : uint8
 {
 	Join_Result,// tell client they're accepted/rejected
-	State 		// tell client game state
+	State, 		// tell client game state
+	GameStats
 };
 
 enum class Game_Object_Type : uint8
@@ -98,10 +104,12 @@ public:
 	bool RemoveClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from);
 	bool SendGameStateToAll();
 	void FillBufferWithGameState();
+	void FillBufferWithPlayersStats();
 	void ParseBuffer();
 	void HandlePlayerInput();
 	void UpdateGame();
 	void RespawnPlayer(uint16 playerSlot);
+	void LoadMap(uint16 mapNumber);
 	// void HandleState(int8* buffer, int32 bytes_read);
 
 	virtual ~Server();
@@ -131,11 +139,13 @@ private:
 	Projectil projectil_objects[MAX_CLIENTS * MAX_PROJECTILES];
 	Player_Input client_inputs[MAX_CLIENTS];
 	std::vector<Hittable*> hittable_objects;
+	std::vector<CollisionObject*> other_collision_objects;
 	MapBorder map_border[4];
 	bool is_running = true;
 	bool has_player = false;
 	float32 time_without_players;
 	std::mutex send_buf_mtx;
 	std::mutex input_mutex;
+	uint16 mapNumber = 0;
 };
 

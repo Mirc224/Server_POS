@@ -50,6 +50,11 @@ uint16 Player::getDeaths()
 	return this->m_deaths;
 }
 
+void Player::setPlayerName(std::string playerName)
+{
+	this->m_playerName = playerName;
+}
+
 void Player::setCordX(float x)
 {
 	this->m_playerBody.getPosition().x = x;
@@ -88,6 +93,11 @@ AABB & Player::getAABBsize()
 bool Player::isActive()
 {
 	return this->m_playerStatus == Player::Status::ALIVE;
+}
+
+bool Player::countAsKill()
+{
+	return true;
 }
 
 bool Player::CheckCollision(CollisionObject & other)
@@ -161,6 +171,16 @@ void Player::setReadyToFire(bool ready)
 	this->m_ready_to_fire = ready;
 }
 
+void Player::setDeaths(uint16 deaths)
+{
+	this->m_deaths = deaths;
+}
+
+void Player::setKills(uint16 kills)
+{
+	this->m_kills = kills;
+}
+
 void Player::Reload()
 {
 	this->m_last_shot_t = 0.0f;
@@ -216,7 +236,7 @@ float Player::getLastShotTime()
 
 std::string Player::getName()
 {
-	return "Hrac " + std::to_string(this->m_playerSlot);
+	return this->m_playerName;
 }
 
 void Player::HittedAction()
@@ -234,6 +254,24 @@ void Player::Spawn()
 	this->m_playerDirection = Player::Direction::DOWN;
 	this->m_playerAction = Player::Action::IDLE;
 	this->m_playerStatus = Player::Status::ALIVE;
+}
+
+void Player::CountKill()
+{
+	++this->m_kills;
+}
+
+void Player::UploadPlayerStats(int8 * buffer, int32 & bytes_written)
+{
+	uint16 nameLength = this->m_playerName.length();
+	memcpy(&buffer[bytes_written], &nameLength, sizeof(nameLength));
+	bytes_written += sizeof(nameLength);
+	this->m_playerName.copy(&buffer[bytes_written], nameLength);
+	bytes_written += nameLength * sizeof(char);
+	memcpy(&buffer[bytes_written], &this->m_kills, sizeof(this->m_kills));
+	bytes_written += sizeof(this->m_kills);
+	memcpy(&buffer[bytes_written], &this->m_deaths, sizeof(this->m_deaths));
+	bytes_written += sizeof(this->m_deaths);
 }
 
 void Player::UploadState(int8 * buffer, int32 & bytes_written)

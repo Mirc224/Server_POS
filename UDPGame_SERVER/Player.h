@@ -28,7 +28,9 @@ public:
 	Body& getBody() override;
 	AABB& getAABBsize() override;
 	bool isActive() override;
+	bool countAsKill() override;
 
+	void setPlayerName(std::string playerName);
 	void setCordX(float x);
 	void setCordY(float y);
 	void addCordX(float x);
@@ -45,6 +47,8 @@ public:
 	void addShotTime(float deltaTime);
 	void addRespawnTime(float deltaTime);
 	void setReadyToFire(bool ready);
+	void setDeaths(uint16 deaths);
+	void setKills(uint16 kills);
 
 	void Reload();
 	void Shoot();
@@ -56,6 +60,7 @@ public:
 	void HittedAction();
 	void Spawn();
 	void CountKill();
+	void UploadPlayerStats(int8* buffer, int32& bytes_written);
 	void UploadState(int8* buffer, int32& bytes_written);
 	void InsertState(int8* buffer, int32& bytes_read);
 	void Update(double deltaTime);
@@ -81,5 +86,6 @@ private:
 	AABB m_aabbsize;
 	uint16 m_kills = 0;
 	uint16 m_deaths = 0;
+	std::string m_playerName = "Player";
 };
 
