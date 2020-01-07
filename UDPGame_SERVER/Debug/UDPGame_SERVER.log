@@ -1,5 +1,8 @@
 ﻿  Server.cpp
-c:\users\mirko\source\repos\udpgame_server\udpgame_server\server.cpp(444): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
-c:\users\mirko\source\repos\udpgame_server\udpgame_server\server.cpp(445): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
-c:\users\mirko\source\repos\udpgame_server\udpgame_server\server.cpp(775): warning C4018: '<': signed/unsigned mismatch
+c:\users\mirko\source\repos\udpgame_server\udpgame_server\server.cpp(436): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+c:\users\mirko\source\repos\udpgame_server\udpgame_server\server.cpp(437): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+c:\users\mirko\source\repos\udpgame_server\udpgame_server\server.cpp(767): warning C4018: '<': signed/unsigned mismatch
+  main.cpp
+c:\users\mirko\source\repos\udpgame_server\udpgame_server\main.cpp(8): warning C4326: return type of 'main' should be 'int' instead of 'void'
+  Generating Code...
   UDPGame_SERVER.vcxproj -> C:\Users\Mirko\source\repos\UDPGame_SERVER\Debug\UDPGame_SERVER.exe

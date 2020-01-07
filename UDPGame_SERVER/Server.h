@@ -103,8 +103,8 @@ public:
 	bool AddNewClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from);
 	bool RemoveClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from);
 	bool SendGameStateToAll();
-	void FillBufferWithGameState();
-	void FillBufferWithPlayersStats();
+	void FillBufferWithGameState(int8* buffer);
+	void FillBufferWithPlayersStats(int8* buffer);
 	void ParseBuffer();
 	void HandlePlayerInput();
 	void UpdateGame();
@@ -131,8 +131,9 @@ private:
 	UINT sleep_granularity_ms;
 	bool32 sleep_granularity_was_set;
 	LARGE_INTEGER clock_frequency;
-	int8 buffer[SOCKET_BUFFER_SIZE];
-	int8 listenBuffer[SOCKET_BUFFER_SIZE];
+	int8 mainSendBuffer[SOCKET_BUFFER_SIZE];
+	int8 threadListenBuffer[SOCKET_BUFFER_SIZE];
+	int8 threadSendBuffer[SOCKET_BUFFER_SIZE];
 	IP_Endpoint client_endpoints[MAX_CLIENTS];
 	float32 time_since_heard_from_clients[MAX_CLIENTS];
 	Player player_objects[MAX_CLIENTS];
@@ -144,7 +145,6 @@ private:
 	bool is_running = true;
 	bool has_player = false;
 	float32 time_without_players;
-	std::mutex send_buf_mtx;
 	std::mutex input_mutex;
 	uint16 mapNumber = 0;
 };

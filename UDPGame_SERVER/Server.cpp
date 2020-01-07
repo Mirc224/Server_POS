@@ -132,12 +132,12 @@ void Server::Listen()
 	while (is_running)
 	{
 		int flags = 0;
-		ZeroMemory(&listenBuffer, SOCKET_BUFFER_SIZE);
+		ZeroMemory(&threadListenBuffer, SOCKET_BUFFER_SIZE);
 		SOCKADDR_IN from;
 		int from_size = sizeof(from);
 		while (true)
 		{
-			int bytes_received = recvfrom(sock, listenBuffer, SOCKET_BUFFER_SIZE, flags, (SOCKADDR*)&from, &from_size);
+			int bytes_received = recvfrom(sock, threadListenBuffer, SOCKET_BUFFER_SIZE, flags, (SOCKADDR*)&from, &from_size);
 			if (bytes_received == SOCKET_ERROR)
 			{
 				int error = WSAGetLastError();
@@ -153,7 +153,7 @@ void Server::Listen()
 			from_endpoint.address = from.sin_addr.S_un.S_addr;
 			from_endpoint.port = from.sin_port;
 
-			switch ((uint8)listenBuffer[0])
+			switch ((uint8)threadListenBuffer[0])
 			{
 			case (uint8)Client_Message::Join:
 				AddNewClient(from_endpoint, from);
@@ -191,28 +191,26 @@ bool Server::AddNewClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from)
 	}
 	uint16 bytesRead = 1;
 	uint16 nameLength;
-	memcpy(&nameLength, &listenBuffer[bytesRead], sizeof(nameLength));
+	memcpy(&nameLength, &threadListenBuffer[bytesRead], sizeof(nameLength));
 	bytesRead += sizeof(nameLength);
-	std::string playerName(&listenBuffer[bytesRead], nameLength);
+	std::string playerName(&threadListenBuffer[bytesRead], nameLength);
 	bytesRead += nameLength * sizeof(char);
 
 	this->player_objects[slot].setPlayerName(playerName);
-	send_buf_mtx.lock();
-	ZeroMemory(&buffer, SOCKET_BUFFER_SIZE);
-	buffer[0] = (int8)Server_Message::Join_Result;
+	ZeroMemory(&threadSendBuffer, SOCKET_BUFFER_SIZE);
+	threadSendBuffer[0] = (int8)Server_Message::Join_Result;
 	if (slot != uint16(-1))
 	{
 		printf("client will be assigned to slot %hu\n", slot);
-		buffer[1] = 1;
+		threadSendBuffer[1] = 1;
 		uint16 bytesWritten = 2;
-		memcpy(&buffer[bytesWritten], &slot, sizeof(slot));
+		memcpy(&threadSendBuffer[bytesWritten], &slot, sizeof(slot));
 		bytesWritten += sizeof(slot);
-		memcpy(&buffer[bytesWritten], &this->mapNumber, sizeof(this->mapNumber));
+		memcpy(&threadSendBuffer[bytesWritten], &this->mapNumber, sizeof(this->mapNumber));
 		bytesWritten += sizeof(this->mapNumber);
 		flags = 0;
-		if (sendto(sock, buffer, bytesWritten + 1, flags, (SOCKADDR*)&from, from_size) != SOCKET_ERROR)
+		if (sendto(sock, threadSendBuffer, bytesWritten + 1, flags, (SOCKADDR*)&from, from_size) != SOCKET_ERROR)
 		{
-			send_buf_mtx.unlock();
 			client_endpoints[slot] = from_endpoint;
 			time_since_heard_from_clients[slot] = 0.0f;
 			client_inputs[slot] = {};
@@ -222,7 +220,6 @@ bool Server::AddNewClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from)
 		}
 		else
 		{
-			send_buf_mtx.unlock();
 			printf("sendto failed: %d\n", WSAGetLastError());
 			return false;
 		}
@@ -230,14 +227,14 @@ bool Server::AddNewClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from)
 	else
 	{
 		printf("could not find a slot for player\n");
-		buffer[1] = 0;
+		threadSendBuffer[1] = 0;
 
 		flags = 0;
-		if (sendto(sock, buffer, 2, flags, (SOCKADDR*)&from, from_size) == SOCKET_ERROR)
+		if (sendto(sock, threadSendBuffer, 2, flags, (SOCKADDR*)&from, from_size) == SOCKET_ERROR)
 		{
 			printf("sendto failed: %d\n", WSAGetLastError());
 		}
-		send_buf_mtx.unlock();
+
 		return false;
 	}
 	return true;
@@ -251,19 +248,17 @@ bool Server::RemoveClient(IP_Endpoint& from_endpoint, SOCKADDR_IN& from)
 	to.sin_port = htons(PORT);
 	int to_length = sizeof(to);
 	uint16 slot;
-	memcpy(&slot, &listenBuffer[1], sizeof(slot));
+	memcpy(&slot, &threadListenBuffer[1], sizeof(slot));
 	if (client_endpoints[slot] == from_endpoint)
 	{
 		to.sin_addr.S_un.S_addr = client_endpoints[slot].address;
 		to.sin_port = client_endpoints[slot].port;
 
-		send_buf_mtx.lock();
-		this->FillBufferWithPlayersStats();
-		if (sendto(sock, buffer, SOCKET_BUFFER_SIZE, flags, (SOCKADDR*)&to, to_length) == SOCKET_ERROR)
+		this->FillBufferWithPlayersStats(threadSendBuffer);
+		if (sendto(sock, threadSendBuffer, SOCKET_BUFFER_SIZE, flags, (SOCKADDR*)&to, to_length) == SOCKET_ERROR)
 		{
 			printf("sendto failed: %d\n", WSAGetLastError());
 		}
-		send_buf_mtx.unlock();
 
 		client_endpoints[slot] = {};
 		printf("Client_Message::Disconnect from slot %d Address %d.%d.%d.%d:%d\n", slot, from.sin_addr.S_un.S_un_b.s_b1,
@@ -285,9 +280,7 @@ bool Server::SendGameStateToAll()
 	to.sin_port = htons(PORT);
 	int to_length = sizeof(to);
 
-	send_buf_mtx.lock();
-	ZeroMemory(buffer, SOCKET_BUFFER_SIZE);
-	FillBufferWithGameState();
+	FillBufferWithGameState(mainSendBuffer);
 	for (uint16 i = 0; i < MAX_CLIENTS; ++i)
 	{
 		if (client_endpoints[i].address)
@@ -295,17 +288,16 @@ bool Server::SendGameStateToAll()
 			to.sin_addr.S_un.S_addr = client_endpoints[i].address;
 			to.sin_port = client_endpoints[i].port;
 
-			if (sendto(sock, buffer, SOCKET_BUFFER_SIZE, flags, (SOCKADDR*)&to, to_length) == SOCKET_ERROR)
+			if (sendto(sock, mainSendBuffer, SOCKET_BUFFER_SIZE, flags, (SOCKADDR*)&to, to_length) == SOCKET_ERROR)
 			{
 				printf("sendto failed: %d\n", WSAGetLastError());
 			}
 		}
 	}
-	send_buf_mtx.unlock();
 	return true;
 }
 
-void Server::FillBufferWithGameState()
+void Server::FillBufferWithGameState(int8* buffer)
 {
 	ZeroMemory(buffer, SOCKET_BUFFER_SIZE);
 	buffer[0] = (uint8)Server_Message::State;
@@ -338,7 +330,7 @@ void Server::FillBufferWithGameState()
 	memcpy(&buffer[1], &numberOfObjects, sizeof(numberOfObjects));
 }
 
-void Server::FillBufferWithPlayersStats()
+void Server::FillBufferWithPlayersStats(int8* buffer)
 {
 	int32 bytesWritten = 0;
 	uint16 numberOfPlayers = 0;
@@ -358,7 +350,7 @@ void Server::FillBufferWithPlayersStats()
 
 void Server::ParseBuffer()
 {
-	Server_Message type_of_message = (Server_Message)buffer[0];
+	Server_Message type_of_message = (Server_Message)threadListenBuffer[0];
 	int32 bytes_read = 1;
 	switch (type_of_message)
 	{
@@ -375,9 +367,9 @@ void Server::HandlePlayerInput()
 	uint16 playerSlot = -1;
 	uint8 playerActions = 0;
 	int bytesRead = 1;
-	memcpy(&playerSlot, &listenBuffer[bytesRead], sizeof(playerSlot));
+	memcpy(&playerSlot, &threadListenBuffer[bytesRead], sizeof(playerSlot));
 	bytesRead += sizeof(playerSlot);
-	playerActions = listenBuffer[bytesRead++];
+	playerActions = threadListenBuffer[bytesRead++];
 	time_since_heard_from_clients[playerSlot] = 0.0f;
 	bool fireRequest = false;
 	input_mutex.lock();
